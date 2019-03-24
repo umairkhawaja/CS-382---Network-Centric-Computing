@@ -21,7 +21,7 @@ def getSnake(pid,players=2):
         snake.change_direction(KEY_RIGHT)
     elif pid == 2:
         snake = Snake(int(BOARD_WIDTH/players),10+int(BOARD_HEIGHT/players),heads[active_players-1])
-        snake.change_direction(KEY_RIGHT)
+        snake.change_direction(KEY_LEFT)
     return snake
 
 def parseBody(bodylist):
@@ -85,7 +85,9 @@ def checkBoundaries():
                 for client in clients:
                     active_players = 0
                     client.send("VICTORY".encode(ENCODING))
-                    client.close()
+                    sleep(2)
+                    removeClient(client)
+                    # client.close()
                     return
             else:
                 for client in clients:
@@ -300,7 +302,7 @@ def broadcastState():
             gameState[client].update()
             gs_lock.release()
         
-        sleep(0.1)
+        sleep(0.05)
         client_lock.acquire()
         for sock in clients:
             player_id = clients[sock]
