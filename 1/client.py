@@ -54,7 +54,7 @@ def receive(window):
                 # window.clear()
                 client_socket.close()
                 
-                return
+                break
             else:
                 i = msg.find('{')
                 j = msg.find(';')
