@@ -83,36 +83,100 @@ def checkBoundaries():
         try:
             if len(clients) == 1:
                 for client in clients:
+                    active_players = 0
                     client.send("VICTORY".encode(ENCODING))
                     client.close()
                     return
             else:
                 for client in clients:
-                    gs_lock.acquire()
-                    snake = gameState[client]
-                    gs_lock.release()
-                    if snake.head.x == MAX_X\
-                    or snake.head.y == MAX_Y\
-                    or snake.head.x < 1\
-                    or snake.head.y < 1:
-                        client.send("BYE".encode(ENCODING))
-                        del gameState[client]
-                        state_lock.acquire()
-                        del state[clients[client]]
-                        state_lock.release()
+                    try:
+                        gs_lock.acquire()
+                        snake = gameState[client]
+                        gs_lock.release()
+                        if snake.head.x == MAX_X\
+                        or snake.head.y == MAX_Y\
+                        or snake.head.x < 1\
+                        or snake.head.y < 1:
+                            client.send("BYE".encode(ENCODING))
+                            del gameState[client]
+                            state_lock.acquire()
+                            del state[clients[client]]
+                            state_lock.release()
 
-                        print(f"{clients[client]} disconnected")
+                            print(f"{clients[client]} disconnected")
 
-                        client_lock.acquire()
-                        del clients[client]
-                        client_lock.release()
+                            client_lock.acquire()
+                            del clients[client]
+                            client_lock.release()
 
-                        active_players-=1
-                        clientExit[client] = True
-                        client.close()
-                        print(state)
+                            active_players-=1
+                            clientExit[client] = True
+                            client.close()
+                    except:
+                        continue
+                        # print(state)
         except RuntimeError:
             continue
+
+
+def removeClient(client):
+    global gameState
+    global KEY_MAP
+    global state
+    global clients
+    global clientExit
+    global active_players
+    try:
+        client.send("BYE".encode(ENCODING))
+        del gameState[client]
+        state_lock.acquire()
+        del state[clients[client]]
+        state_lock.release()
+
+        print(f"{clients[client]} disconnected")
+
+        client_lock.acquire()
+        del clients[client]
+        client_lock.release()
+
+        active_players-=1
+        clientExit[client] = True
+        client.close()
+    except:
+        print("Connection already closed")
+
+def rules():
+    global allClients
+    global gameState
+    global clients
+    global clientExit
+    while len(allClients) > 1:
+        heads = {}
+        for clt in allClients:
+            try:
+                body = gameState[clt].getBody()
+                # print(clt)
+                pid = clients[clt]
+                # print(pid, body[-1].y, body[-1].x, body[-1].char)
+                heads[clt] = (body[-1].y, body[-1].x)
+            except:
+                continue
+        for clt, head in heads.items():
+            count = 0
+            matchings = []
+            for clts, hed in heads.items():
+                if hed == head:
+                    count += 1
+                    matchings.append(clts)
+            if(len(matchings) > 1):
+                for t in matchings:
+                    try:
+                        pid = clients[t]
+                        if(clientExit[pid] == False):
+                            removeClient(t)
+                    except:
+                        continue
+
 
 def accept_conn():
     global active_players
@@ -176,7 +240,12 @@ def handle_All_Clients():
         dir_threads[client].start()
     Thread(target=broadcastState).start()
     Thread(target=checkBoundaries).start()
+    Thread(target=rules).start()
         # mov_threads[client].start()
+
+
+
+
 
 
 def handle_client_direction(client):
@@ -190,23 +259,26 @@ def handle_client_direction(client):
     global state_lock
 
     while True and client in clients:
-        event = client.recv(BUFFSIZE).decode(ENCODING)
-        if event in KEY_MAP:
-            direction = KEY_MAP[event]
+        try:
+            event = client.recv(BUFFSIZE).decode(ENCODING)
+            if event in KEY_MAP:
+                direction = KEY_MAP[event]
 
-            gs_lock.acquire()
-            snake = gameState[client]
-            snake.change_direction(direction)
-            snake.update()
-            gs_lock.release()
+                gs_lock.acquire()
+                snake = gameState[client]
+                snake.change_direction(direction)
+                snake.update()
+                gs_lock.release()
 
-            body = parseBody(snake.getBody())
-            str_body = json.dumps(body)
-            player_id = clients[client]
+                body = parseBody(snake.getBody())
+                str_body = json.dumps(body)
+                player_id = clients[client]
 
-            state_lock.acquire()
-            state[player_id] = str_body
-            state_lock.release()
+                state_lock.acquire()
+                state[player_id] = str_body
+                state_lock.release()
+        except:
+            continue
             
 
 def broadcastState():
@@ -228,7 +300,7 @@ def broadcastState():
             gameState[client].update()
             gs_lock.release()
         
-        sleep(TIMEOUT/1000)
+        sleep(0.1)
         client_lock.acquire()
         for sock in clients:
             player_id = clients[sock]
@@ -236,7 +308,11 @@ def broadcastState():
             str_body = json.dumps(body)
             state[player_id] = str_body
             data = json.dumps(state) + ";"
-            sock.send(data.encode(ENCODING))
+            # if data is not None:
+            try:
+                sock.send(data.encode(ENCODING))
+            except:
+                continue
         client_lock.release()
     
 
