@@ -55,12 +55,16 @@ def receive(window):
                 client_socket.close()
                 
                 break
-            else:
+            elif msg != None:
                 i = msg.find('{')
                 j = msg.find(';')
                 msg = msg[i:j]
-                state = json.loads(msg)
-                render(state,window)
+                try:
+                    state = json.loads(msg)
+                    render(state,window)
+                except json.JSONDecodeError:
+                    continue
+            # sleep(0.1)
         except OSError:
             break
 

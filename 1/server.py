@@ -38,6 +38,8 @@ KEY_MAP = {
 }
 
 HOST = sys.argv[1]
+# LUMS = '10.130.62.83'
+# PORT = 4151
 PORT = int(sys.argv[2])
 NUM_PLAYERS = int(sys.argv[3])
 ENCODING = "utf8"
@@ -88,6 +90,7 @@ def checkBoundaries():
                     sleep(2)
                     removeClient(client)
                     # client.close()
+                    SERVER.close()
                     return
             else:
                 for client in clients:
@@ -144,6 +147,8 @@ def removeClient(client):
         active_players-=1
         clientExit[client] = True
         client.close()
+        if active_players == 0:
+            SERVER.close()
     except:
         print("Connection already closed")
 
@@ -180,6 +185,32 @@ def rules():
                         continue
 
 
+def checkCollisions():
+    global allClients
+    global gameState
+    global clients
+    global clientExit
+    global gs_lock
+    while active_players > 1:
+        gs_lock.acquire()
+        for client in gameState:
+            attacker = gameState[client]
+            for  client2 in gameState:
+                if client != client2:
+                    victim = gameState[client2]
+                    victimBody = [[body.x,body.y] for body in victim.getBody()]
+                    # print(f"Head: {list(attacker.coord)}, Body: {victimBody}")
+                    if attacker.coord == victim.coord:
+                        removeClient(client)
+                        removeClient(client2)
+                    elif list(attacker.coord) in victimBody:
+                        print(f'Clash detected {clients[client]} ate {clients[client2]} at {attacker.coord} ==> {victimBody}')
+                        removeClient(client2)
+                        if active_players == 1:
+                            client.send("VICTORY".encode(ENCODING))
+                            return
+        gs_lock.release()
+
 def accept_conn():
     global active_players
     global gameState
@@ -188,11 +219,12 @@ def accept_conn():
     global client_lock
     global state_lock
 
-    while True:
+    while active_players < NUM_PLAYERS:
         client, client_addr = SERVER.accept()
         print(f"{client_addr} has connected")
         allClients.append(client)
-        player_id = active_players+1
+        active_players+=1
+        player_id = active_players
         msg = "PID:"+str(player_id)
         client.send(msg.encode(ENCODING))
         
@@ -203,14 +235,13 @@ def accept_conn():
         
         pid_map[player_id] = client
         clientExit[player_id] = False
-        active_players+=1
         client_snake = getSnake(player_id,NUM_PLAYERS)
 
         gs_lock.acquire()
         gameState[client] = client_snake
         gs_lock.release()
 
-
+        print('Getting body for player ', clients[client])
         body = parseBody(gameState[client].getBody())
         data = json.dumps(body)
         
@@ -242,7 +273,7 @@ def handle_All_Clients():
         dir_threads[client].start()
     Thread(target=broadcastState).start()
     Thread(target=checkBoundaries).start()
-    Thread(target=rules).start()
+    Thread(target=checkCollisions).start()
         # mov_threads[client].start()
 
 
@@ -302,7 +333,7 @@ def broadcastState():
             gameState[client].update()
             gs_lock.release()
         
-        sleep(0.05)
+        sleep(0.2)
         client_lock.acquire()
         for sock in clients:
             player_id = clients[sock]
