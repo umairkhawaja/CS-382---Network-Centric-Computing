@@ -8,7 +8,7 @@ BOARD_WIDTH = 60
 BOARD_HEIGHT = 25
 MAX_X = BOARD_WIDTH - 1
 MAX_Y = BOARD_HEIGHT - 1
-SNAKE_LENGTH = 5
+SNAKE_LENGTH = 4
 SNAKE_X = int(MAX_X/2)
 SNAKE_Y = int(MAX_Y/2)
 # SNAKE_Y = randint(SNAKE_LENGTH,MAX_Y)
@@ -33,7 +33,7 @@ class Snake(object):
         KEY_RIGHT: KEY_LEFT
     }
 
-    def __init__(self,x,y,hChar):
+    def __init__(self,x,y,hChar,dir=None):
         self.body_list = []
         self.timeout = TIMEOUT
 
@@ -45,7 +45,11 @@ class Snake(object):
         self.body_list.append(Body(x,y,hChar))
 
         # self.window = window
-        self.direction = choice([KEY_RIGHT, KEY_LEFT, KEY_DOWN, KEY_UP])
+        self.direction = None
+        if dir == None:
+            self.direction = choice([KEY_RIGHT, KEY_LEFT, KEY_DOWN, KEY_UP])
+        else:
+            self.direction = dir
         self.last_head_coord = (x,y)
         self.direction_map = {
             KEY_UP: self.move_up,

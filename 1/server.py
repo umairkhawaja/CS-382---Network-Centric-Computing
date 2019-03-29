@@ -17,11 +17,18 @@ def getSnake(pid,players=2):
 
     snake = None
     if pid == 1:
-        snake = Snake(int(BOARD_WIDTH/players),int(BOARD_HEIGHT/players),heads[active_players-1])
-        snake.change_direction(KEY_RIGHT)
+        snake = Snake(5,2,heads[active_players-1],KEY_RIGHT)
     elif pid == 2:
-        snake = Snake(int(BOARD_WIDTH/players),10+int(BOARD_HEIGHT/players),heads[active_players-1])
-        snake.change_direction(KEY_LEFT)
+        snake = Snake(BOARD_WIDTH - 6 ,3,heads[active_players-1],KEY_LEFT)
+    elif pid == 3:
+        snake = Snake(5,BOARD_HEIGHT - 6,heads[active_players-1],KEY_RIGHT)        
+    elif pid == 4:
+        snake = Snake(BOARD_WIDTH - 6 ,BOARD_HEIGHT - 6,heads[active_players-1],KEY_LEFT)
+    elif pid == 5:
+        snake = Snake(BOARD_WIDTH//2,BOARD_HEIGHT - 6,heads[active_players-1],KEY_UP)
+    else:
+        snake = Snake(BOARD_WIDTH//2 ,5,heads[active_players-1],KEY_DOWN)
+
     return snake
 
 def parseBody(bodylist):
@@ -90,8 +97,7 @@ def checkBoundaries():
                     sleep(2)
                     removeClient(client)
                     # client.close()
-                    SERVER.close()
-                    return
+                    # return
             else:
                 for client in clients:
                     try:
@@ -117,7 +123,7 @@ def checkBoundaries():
                             active_players-=1
                             clientExit[client] = True
                             client.close()
-                    except:
+                    except BrokenPipeError:
                         continue
                         # print(state)
         except RuntimeError:
@@ -147,8 +153,6 @@ def removeClient(client):
         active_players-=1
         clientExit[client] = True
         client.close()
-        if active_players == 0:
-            SERVER.close()
     except:
         print("Connection already closed")
 
@@ -191,25 +195,31 @@ def checkCollisions():
     global clients
     global clientExit
     global gs_lock
-    while active_players > 1:
-        gs_lock.acquire()
-        for client in gameState:
-            attacker = gameState[client]
-            for  client2 in gameState:
-                if client != client2:
-                    victim = gameState[client2]
-                    victimBody = [[body.x,body.y] for body in victim.getBody()]
-                    # print(f"Head: {list(attacker.coord)}, Body: {victimBody}")
-                    if attacker.coord == victim.coord:
-                        removeClient(client)
-                        removeClient(client2)
-                    elif list(attacker.coord) in victimBody:
-                        print(f'Clash detected {clients[client]} ate {clients[client2]} at {attacker.coord} ==> {victimBody}')
-                        removeClient(client2)
-                        if active_players == 1:
-                            client.send("VICTORY".encode(ENCODING))
-                            return
-        gs_lock.release()
+    while len(clients) > 1:
+        current_state = gameState.copy()
+        try:
+            gs_lock.acquire()
+            for client in current_state:
+                attacker = current_state[client]
+                for  client2 in current_state:
+                    if client != client2:
+                        victim = current_state[client2]
+                        victimBody = [[body.x,body.y] for body in victim.getBody()]
+                        # print(f"Head: {list(attacker.coord)}, Body: {victimBody}")
+                        if attacker.coord == victim.coord:
+                            removeClient(client)
+                            removeClient(client2)
+                        elif list(attacker.coord) in victimBody:
+                            # print(f'Clash detected {clients[client]} ate {clients[client2]} at {attacker.coord} ==> {victimBody}')
+                            removeClient(client2)
+                            # client.send()
+                            if active_players == 1:
+                                client.send("VICTORY".encode(ENCODING))
+                                return
+            gs_lock.release()
+        except RuntimeError:
+            print("Oops")
+            continue
 
 def accept_conn():
     global active_players
@@ -274,7 +284,6 @@ def handle_All_Clients():
     Thread(target=broadcastState).start()
     Thread(target=checkBoundaries).start()
     Thread(target=checkCollisions).start()
-        # mov_threads[client].start()
 
 
 
@@ -291,6 +300,7 @@ def handle_client_direction(client):
     global client_lock
     global state_lock
 
+    
     while True and client in clients:
         try:
             event = client.recv(BUFFSIZE).decode(ENCODING)
@@ -328,25 +338,36 @@ def broadcastState():
     global gs_lock
     
     while True:
-        for client in gameState:
-            gs_lock.acquire()
-            gameState[client].update()
-            gs_lock.release()
-        
-        sleep(0.2)
-        client_lock.acquire()
-        for sock in clients:
-            player_id = clients[sock]
-            body = parseBody(gameState[sock].getBody())
-            str_body = json.dumps(body)
-            state[player_id] = str_body
-            data = json.dumps(state) + ";"
-            # if data is not None:
-            try:
-                sock.send(data.encode(ENCODING))
-            except:
-                continue
-        client_lock.release()
+        current_state = gameState.copy()
+        current_clients = clients.copy()
+        # print('Broadcasting')
+        try:
+            # gs_lock.acquire()
+            for client in current_state:
+                current_state[client].update()
+            # gs_lock.release()
+            
+            sleep(0.2)
+            # client_lock.acquire()
+            for sock in current_clients:
+                player_id = current_clients[sock]
+                body = parseBody(current_state[sock].getBody())
+                str_body = json.dumps(body)
+                state[player_id] = str_body
+                data = json.dumps(state) + ";"
+                # if data is not None:
+                try:
+                    sock.send(data.encode(ENCODING))
+                except BrokenPipeError:
+                    # print(f"Err broadcasting to {sock}")
+                    continue
+                except OSError:
+                    # print(f"Err broadcasting to {sock}")
+                    continue
+
+            # client_lock.release()
+        except RuntimeError:
+            print("OOPS")
     
 
 if __name__ == "__main__":
