@@ -52,7 +52,9 @@ def receive(window):
                 window.addstr(int(BOARD_HEIGHT/2),int(BOARD_WIDTH/2),"YOU WON!")
                 # curses.endwin()
                 # window.clear()
-                client_socket.close()
+                sleep(2)
+                client_socket.send("27".encode(ENCODING))
+                # client_socket.close()
                 
                 break
             elif msg != None:

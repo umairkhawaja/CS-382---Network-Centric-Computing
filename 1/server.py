@@ -128,6 +128,10 @@ def checkBoundaries():
                         # print(state)
         except RuntimeError:
             continue
+        except KeyError:
+            continue
+        except BrokenPipeError:
+            continue
 
 
 def removeClient(client):
@@ -301,7 +305,8 @@ def handle_client_direction(client):
     global state_lock
 
     
-    while True and client in clients:
+    while True:
+        # print("Handling Direction")
         try:
             event = client.recv(BUFFSIZE).decode(ENCODING)
             if event in KEY_MAP:
@@ -339,7 +344,7 @@ def broadcastState():
     
     while True:
         current_state = gameState.copy()
-        current_clients = clients.copy()
+        # current_clients = clients.copy()
         # print('Broadcasting')
         try:
             # gs_lock.acquire()
@@ -349,8 +354,8 @@ def broadcastState():
             
             sleep(0.2)
             # client_lock.acquire()
-            for sock in current_clients:
-                player_id = current_clients[sock]
+            for sock in clients:
+                player_id = clients[sock]
                 body = parseBody(current_state[sock].getBody())
                 str_body = json.dumps(body)
                 state[player_id] = str_body
