@@ -88,10 +88,15 @@ def checkBoundaries():
 
     while True:
         try:
-            if len(clients) == 1:
+            if len(clients) == 1 and active_players == 1:
                 for client in clients:
                     active_players = 0
+                    print(f'{clients[client]} wins boundaries!')
+                    # try:
                     client.send("VICTORY".encode(ENCODING))
+                    del clients[client]
+                    # except:
+                        # continue
             else:
                 for client in clients:
                     try:
@@ -165,12 +170,14 @@ def checkCollisions():
                             removeClient(client2)
                         elif list(attacker.coord) in victimBody:
                             try:
-                                print(f'Clash detected {clients[client]} ate {clients[client2]} at {attacker.coord} ==> {victimBody}')
+                                print(f'Clash detected {clients[client]} clashed into {clients[client2]} at {attacker.coord} ==> {victimBody}')
                             except KeyError:
                                 continue
-                            removeClient(client2)
+                            removeClient(client)
                             if active_players == 1:
+                                print(f'{clients[client]} wins collisions!')
                                 client.send("VICTORY".encode(ENCODING))
+                                del clients[client]
                                 return
         except RuntimeError:
             print("Oops")
@@ -290,7 +297,7 @@ def broadcastState():
             for client in current_state:
                 current_state[client].update()
 
-            sleep(0.2)
+            sleep(0.05) # COntrol Speed from here. Removing this line makes game too fast
 
             client_lock.acquire()
             for sock in clients:
