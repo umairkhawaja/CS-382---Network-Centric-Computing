@@ -56,6 +56,7 @@ addresses = {}
 BUFFSIZE = 512
 ADDR = (HOST,PORT)
 
+SPEED = 0.2
 
 dir_threads = {}
 
@@ -161,6 +162,7 @@ def checkCollisions():
                         victim = current_state[client2]
                         victimBody = [[body.x,body.y] for body in victim.getBody()]
                         if attacker.coord == victim.coord:
+                            print(f"Head on collision of {clients[client]} and {clients[client2]}")
                             removeClient(client)
                             removeClient(client2)
                         elif list(attacker.coord) in victimBody:
@@ -168,12 +170,12 @@ def checkCollisions():
                                 print(f'Clash detected {clients[client]} ate {clients[client2]} at {attacker.coord} ==> {victimBody}')
                             except KeyError:
                                 continue
-                            removeClient(client2)
+                            removeClient(client)
                             if active_players == 1:
-                                client.send("VICTORY".encode(ENCODING))
+                                client2.send("VICTORY".encode(ENCODING))
                                 return
         except RuntimeError:
-            print("Oops")
+            print("Runtime Error: Check Collisions")
             continue
         except OSError:
             print("OS Error: Check Collisions")
@@ -283,14 +285,14 @@ def broadcastState():
     global client_lock
     global state_lock
     global gs_lock
-    
+    global SPEED
     while True:
         current_state = gameState.copy()
         try:
             for client in current_state:
                 current_state[client].update()
 
-            sleep(0.2)
+            sleep(SPEED)
 
             client_lock.acquire()
             for sock in clients:
