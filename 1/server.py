@@ -53,15 +53,11 @@ ENCODING = "utf8"
 
 clients = {}
 addresses = {}
-BUFFSIZE = 259
+BUFFSIZE = 512
 ADDR = (HOST,PORT)
 
 
-allClients = []
-clientExit = {}
 dir_threads = {}
-mov_threads = {}
-client_ack = {}
 
 client_lock = Lock()
 state_lock = Lock()
@@ -197,9 +193,6 @@ def accept_conn():
         print(f"{client_addr} has connected")
         active_players+=1
         player_id = active_players
-        msg = "PID:"+str(player_id)+";"
-        client.send(msg.encode(ENCODING))
-        
         client_lock.acquire()
         clients[client] = player_id
         client_lock.release()
@@ -216,7 +209,7 @@ def accept_conn():
         body = parseBody(gameState[client].getBody())
 
         str_body = json.dumps(body)
-        msg = "INITIAL_POS:"+str_body+";"
+        msg = "PID:"+str(player_id)+";"+"INITIAL_POS:"+str_body+";"
         client.send(msg.encode(ENCODING))
 
         state_lock.acquire()
