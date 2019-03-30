@@ -84,9 +84,12 @@ def checkBoundaries():
             if len(clients) == 1:
                 for client in clients:
                     active_players = 0
-                    client.send("VICTORY".encode(ENCODING))
-                    client.close()
-                    return
+                    try:
+                        client.send("VICTORY".encode(ENCODING))
+                        client.close()
+                        break
+                    except:
+                        continue
             else:
                 for client in clients:
                     try:
@@ -103,7 +106,7 @@ def checkBoundaries():
                             del state[clients[client]]
                             state_lock.release()
 
-                            print(f"{clients[client]} disconnected")
+                            print(f"{clients[client]} disconnected, Boundaries")
 
                             client_lock.acquire()
                             del clients[client]
@@ -133,7 +136,7 @@ def removeClient(client):
         del state[clients[client]]
         state_lock.release()
 
-        print(f"{clients[client]} disconnected")
+        print(f"{clients[client]} disconnected, Head On Collision")
 
         client_lock.acquire()
         del clients[client]
@@ -155,9 +158,7 @@ def rules():
         for clt in allClients:
             try:
                 body = gameState[clt].getBody()
-                # print(clt)
                 pid = clients[clt]
-                # print(pid, body[-1].y, body[-1].x, body[-1].char)
                 heads[clt] = (body[-1].y, body[-1].x)
             except:
                 continue
@@ -246,8 +247,6 @@ def handle_All_Clients():
 
 
 
-
-
 def handle_client_direction(client):
     global gameState
     global KEY_MAP
@@ -294,22 +293,22 @@ def broadcastState():
     global state_lock
     global gs_lock
     
-    while True:
+    while True and active_players > 0:
         for client in gameState:
             gs_lock.acquire()
             gameState[client].update()
             gs_lock.release()
         
-        sleep(0.1)
+        sleep(0.005)
         client_lock.acquire()
         for sock in clients:
-            player_id = clients[sock]
-            body = parseBody(gameState[sock].getBody())
-            str_body = json.dumps(body)
-            state[player_id] = str_body
-            data = json.dumps(state) + ";"
-            # if data is not None:
             try:
+                player_id = clients[sock]
+                body = parseBody(gameState[sock].getBody())
+                str_body = json.dumps(body)
+                state[player_id] = str_body
+                data = json.dumps(state) + ";"
+                # if data is not None:
                 sock.send(data.encode(ENCODING))
             except:
                 continue
