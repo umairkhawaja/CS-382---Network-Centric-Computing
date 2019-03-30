@@ -52,9 +52,15 @@ def receive(window):
                 window.addstr(int(BOARD_HEIGHT/2),int(BOARD_WIDTH/2),"YOU WON!")
                 # curses.endwin()
                 # window.clear()
-                client_socket.close()
+                sleep(2)
+                client_socket.send("27".encode(ENCODING))
+                # client_socket.close()
                 
+<<<<<<< HEAD
                 return
+=======
+                break
+>>>>>>> 4356ce5d872d9face17953dca8f36c5b7d13b76f
             elif msg != None:
                 i = msg.find('{')
                 j = msg.find(';')
@@ -64,8 +70,12 @@ def receive(window):
                     render(state,window)
                 except json.JSONDecodeError:
                     continue
+<<<<<<< HEAD
 
             sleep(0.1)
+=======
+            # sleep(0.1)
+>>>>>>> 4356ce5d872d9face17953dca8f36c5b7d13b76f
         except OSError:
             break
 
