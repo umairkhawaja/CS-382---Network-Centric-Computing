@@ -39,23 +39,25 @@ def receive(window):
         try:
             msg = client_socket.recv(BUFFSIZE).decode(ENCODING)
             if "PID:" in msg:
-                msg = msg.split(':')
-                PLAYER_ID = msg[1]
+                msg = msg.split(';')
+                pid = msg[0]
+                pid = pid.split(':')
+                PLAYER_ID = pid[1]
+
+                state = msg[1]
+                str_body = state.split('INITIAL_POS:')[1]
+                state = json.loads(str_body)
+                for i,val in state.items():
+                    window.addstr(val[1],val[0],val[2])
             elif "BYE" in msg:
                 curses.nocbreak()
-                client_socket.close()
                 EXIT = True
                 break
             elif msg == "VICTORY":
                 window.clear()
                 window.border(0)
                 window.addstr(int(BOARD_HEIGHT/2),int(BOARD_WIDTH/2),"YOU WON!")
-                # curses.endwin()
-                # window.clear()
-                sleep(2)
                 client_socket.send("27".encode(ENCODING))
-                # client_socket.close()
-                
                 break
             elif msg != None:
                 i = msg.find('{')

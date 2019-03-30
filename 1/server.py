@@ -68,6 +68,8 @@ state_lock = Lock()
 gs_lock = Lock()
 
 
+active_threads = []
+
 active_players = 0
 heads = ['@','%','#','8','*','$','+','O','D','X']
 gameState = {}
@@ -94,10 +96,6 @@ def checkBoundaries():
                 for client in clients:
                     active_players = 0
                     client.send("VICTORY".encode(ENCODING))
-                    sleep(2)
-                    removeClient(client)
-                    # client.close()
-                    # return
             else:
                 for client in clients:
                     try:
@@ -108,24 +106,9 @@ def checkBoundaries():
                         or snake.head.y == MAX_Y\
                         or snake.head.x < 1\
                         or snake.head.y < 1:
-                            client.send("BYE".encode(ENCODING))
-                            del gameState[client]
-                            state_lock.acquire()
-                            del state[clients[client]]
-                            state_lock.release()
-
-                            print(f"{clients[client]} disconnected")
-
-                            client_lock.acquire()
-                            del clients[client]
-                            client_lock.release()
-
-                            active_players-=1
-                            clientExit[client] = True
-                            client.close()
+                            removeClient(client)
                     except BrokenPipeError:
                         continue
-                        # print(state)
         except RuntimeError:
             continue
         except KeyError:
@@ -139,58 +122,31 @@ def removeClient(client):
     global KEY_MAP
     global state
     global clients
-    global clientExit
     global active_players
+    global state_lock
+    global gs_lock
+
     try:
         client.send("BYE".encode(ENCODING))
-        del gameState[client]
+
+        gs_lock.acquire()
         state_lock.acquire()
-        del state[clients[client]]
-        state_lock.release()
-
-        print(f"{clients[client]} disconnected")
-
         client_lock.acquire()
+
+        del gameState[client]
+        del state[clients[client]]
+        print(f"{clients[client]} disconnected")
         del clients[client]
+
+        gs_lock.release()
+        state_lock.release()
         client_lock.release()
 
         active_players-=1
-        clientExit[client] = True
         client.close()
     except:
         print("Connection already closed")
 
-def rules():
-    global allClients
-    global gameState
-    global clients
-    global clientExit
-    while len(allClients) > 1:
-        heads = {}
-        for clt in allClients:
-            try:
-                body = gameState[clt].getBody()
-                # print(clt)
-                pid = clients[clt]
-                # print(pid, body[-1].y, body[-1].x, body[-1].char)
-                heads[clt] = (body[-1].y, body[-1].x)
-            except:
-                continue
-        for clt, head in heads.items():
-            count = 0
-            matchings = []
-            for clts, hed in heads.items():
-                if hed == head:
-                    count += 1
-                    matchings.append(clts)
-            if(len(matchings) > 1):
-                for t in matchings:
-                    try:
-                        pid = clients[t]
-                        if(clientExit[pid] == False):
-                            removeClient(t)
-                    except:
-                        continue
 
 
 def checkCollisions():
@@ -202,94 +158,92 @@ def checkCollisions():
     while len(clients) > 1:
         current_state = gameState.copy()
         try:
-            gs_lock.acquire()
             for client in current_state:
                 attacker = current_state[client]
                 for  client2 in current_state:
                     if client != client2:
                         victim = current_state[client2]
                         victimBody = [[body.x,body.y] for body in victim.getBody()]
-                        # print(f"Head: {list(attacker.coord)}, Body: {victimBody}")
                         if attacker.coord == victim.coord:
                             removeClient(client)
                             removeClient(client2)
                         elif list(attacker.coord) in victimBody:
-                            # print(f'Clash detected {clients[client]} ate {clients[client2]} at {attacker.coord} ==> {victimBody}')
+                            try:
+                                print(f'Clash detected {clients[client]} ate {clients[client2]} at {attacker.coord} ==> {victimBody}')
+                            except KeyError:
+                                continue
                             removeClient(client2)
-                            # client.send()
                             if active_players == 1:
                                 client.send("VICTORY".encode(ENCODING))
                                 return
-            gs_lock.release()
         except RuntimeError:
             print("Oops")
             continue
+        except OSError:
+            print("OS Error: Check Collisions")
 
 def accept_conn():
     global active_players
     global gameState
-    global allClients
     global NUM_PLAYERS
     global client_lock
     global state_lock
+    global state
+    global addresses
+    global pid_map
 
     while active_players < NUM_PLAYERS:
         client, client_addr = SERVER.accept()
         print(f"{client_addr} has connected")
-        allClients.append(client)
         active_players+=1
         player_id = active_players
-        msg = "PID:"+str(player_id)
+        msg = "PID:"+str(player_id)+";"
         client.send(msg.encode(ENCODING))
         
         client_lock.acquire()
         clients[client] = player_id
         client_lock.release()
         
-        
         pid_map[player_id] = client
-        clientExit[player_id] = False
+        
         client_snake = getSnake(player_id,NUM_PLAYERS)
+
 
         gs_lock.acquire()
         gameState[client] = client_snake
         gs_lock.release()
 
-        print('Getting body for player ', clients[client])
         body = parseBody(gameState[client].getBody())
-        data = json.dumps(body)
-        
+
+        str_body = json.dumps(body)
+        msg = "INITIAL_POS:"+str_body+";"
+        client.send(msg.encode(ENCODING))
+
         state_lock.acquire()
-        state[player_id] = data
+        state[player_id] = str_body
         state_lock.release()
         
-        
-        data = json.dumps(state) + ";"
-        client.send(
-            bytes(
-                data,
-                ENCODING
-            )
-        )
         addresses[client] = client_addr
         dir_threads[client] = Thread(target=handle_client_direction,args=(client,))
+
         if(active_players == NUM_PLAYERS):
             handle_All_Clients()
 
 
 def handle_All_Clients():
-    global allClients
     global dir_threads
-    global mov_threads
-    global broadcast_thread
+    global accept_threads
 
-    for client in allClients:
+    for client in clients:
         dir_threads[client].start()
-    Thread(target=broadcastState).start()
-    Thread(target=checkBoundaries).start()
-    Thread(target=checkCollisions).start()
-
-
+    
+    t1 = Thread(target=broadcastState)
+    t2 = Thread(target=checkBoundaries)
+    t3 = Thread(target=checkCollisions)
+    active_threads.extend([t1,t2,t3])
+    t1.start()
+    t2.start()
+    t3.start()
 
 
 
@@ -299,19 +253,15 @@ def handle_client_direction(client):
     global KEY_MAP
     global state
     global clients
-    global clientExit
     global active_players
     global client_lock
     global state_lock
-
     
-    while True:
-        # print("Handling Direction")
+    while client in clients:
         try:
             event = client.recv(BUFFSIZE).decode(ENCODING)
             if event in KEY_MAP:
                 direction = KEY_MAP[event]
-
                 gs_lock.acquire()
                 snake = gameState[client]
                 snake.change_direction(direction)
@@ -321,11 +271,14 @@ def handle_client_direction(client):
                 body = parseBody(snake.getBody())
                 str_body = json.dumps(body)
                 player_id = clients[client]
-
                 state_lock.acquire()
                 state[player_id] = str_body
                 state_lock.release()
-        except:
+            elif event == "27":
+                removeClient(client)
+                return
+        except OSError:
+            print("OS Error: Handle Direction")
             continue
             
 
@@ -334,45 +287,36 @@ def broadcastState():
     global KEY_MAP
     global state
     global clients
-    global clientExit
-    global dir_threads
-    global mov_threads
-    global client_ack
     global client_lock
     global state_lock
     global gs_lock
     
     while True:
         current_state = gameState.copy()
-        # current_clients = clients.copy()
-        # print('Broadcasting')
         try:
-            # gs_lock.acquire()
             for client in current_state:
                 current_state[client].update()
-            # gs_lock.release()
-            
+
             sleep(0.2)
-            # client_lock.acquire()
+
+            client_lock.acquire()
             for sock in clients:
                 player_id = clients[sock]
                 body = parseBody(current_state[sock].getBody())
                 str_body = json.dumps(body)
                 state[player_id] = str_body
                 data = json.dumps(state) + ";"
-                # if data is not None:
                 try:
                     sock.send(data.encode(ENCODING))
                 except BrokenPipeError:
-                    # print(f"Err broadcasting to {sock}")
+                    print(f"Err broadcasting to {sock}")
                     continue
                 except OSError:
-                    # print(f"Err broadcasting to {sock}")
+                    print(f"Err broadcasting to {sock}")
                     continue
-
-            # client_lock.release()
+            client_lock.release()
         except RuntimeError:
-            print("OOPS")
+            print("RuntimeError: Broadcast")
     
 
 if __name__ == "__main__":
@@ -383,6 +327,8 @@ if __name__ == "__main__":
         accept_thread.start()
     except KeyboardInterrupt:
         accept_thread.join()
+        for thread in active_threads:
+            thread.join()
         SERVER.close()
         exit(1)
     finally:
